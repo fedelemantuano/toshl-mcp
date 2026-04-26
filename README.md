@@ -22,7 +22,3 @@ make format      # format code
 make test        # run tests
 make pre-commit  # run all pre-commit hooks
 ```
-
-## Changelog
-
-See [CHANGELOG.md](CHANGELOG.md).
