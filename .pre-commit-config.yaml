@@ -1,0 +1,60 @@
+exclude: '^\.github/'
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.15.12
+    hooks:
+      - id: ruff
+        args: [--fix]
+        exclude: ^migrations/
+      - id: ruff-format
+        exclude: ^(migrations/|\.github/)
+
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v6.0.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: ^migrations/
+      - id: end-of-file-fixer
+        exclude: ^migrations/
+      - id: check-yaml
+      - id: check-added-large-files
+        args: ['--maxkb=5000']
+      - id: check-case-conflict
+      - id: check-json
+        exclude: >-
+          tests/unittests/files/results/.*.json
+      - id: check-merge-conflict
+      - id: detect-aws-credentials
+        args: ["--allow-missing-credentials"]
+      - id: detect-private-key
+      - id: mixed-line-ending
+      - id: check-ast
+        exclude: ^migrations/
+
+  - repo: https://github.com/executablebooks/mdformat
+    rev: 0.7.17
+    hooks:
+      - id: mdformat
+        exclude: '^\.github/'
+        additional_dependencies:
+          - mdformat-frontmatter
+          - mdformat-gfm
+          - mdformat-tables
+
+  - repo: https://github.com/DavidAnson/markdownlint-cli2
+    rev: v0.22.1
+    hooks:
+      - id: markdownlint-cli2
+        args: ['--config', '.markdownlint.json']
+        exclude: '^\.github/'
+
+  - repo: local
+    hooks:
+      - id: pyright
+        name: pyright
+        entry: uv run npx pyright
+        args: [src/, tests/, scripts/]
+        language: system
+        pass_filenames: false
+        types: [python]
