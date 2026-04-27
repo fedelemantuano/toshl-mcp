@@ -30,16 +30,28 @@ make install
 
 ## Claude Desktop Configuration
 
-Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
+**1. Install uv** (if not already installed):
+
+```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**2. Install the package:**
+
+```bash
+git clone git@github.com:fedelemantuano/toshl-mcp.git ~/.toshl-mcp
+```
+
+**3. Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:**
 
 ```json
 {
   "mcpServers": {
     "toshl": {
-      "command": "/path/to/uv",
+      "command": "/Users/<your-username>/.local/bin/uv",
       "args": [
         "--directory",
-        "/path/to/toshl-mcp",
+        "/Users/<your-username>/.toshl-mcp",
         "run",
         "toshl-mcp"
       ],
@@ -51,8 +63,7 @@ Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 }
 ```
 
-Replace `/path/to/uv` with the full path from `which uv` and `/path/to/toshl-mcp` with
-the absolute path to this repository.
+Replace `<your-username>` with your macOS username (run `whoami` to confirm).
 
 > **Note:** Use the full `uv` path (not just `uv`) — Claude Desktop may resolve `uv` to
 > `uvx` which has different semantics and will fail to start the server.
