@@ -4,24 +4,38 @@ build-backend = "hatchling.build"
 
 [project]
 name = "toshl-mcp"
-version = "0.1.0"
-description = ""
+dynamic = ["version"]
+description = "MCP server exposing Toshl Finance API to Claude Desktop"
 authors = [
     {name = "Fedele Mantuano", email = "mantuano.fedele@gmail.com"},
 ]
 readme = "README.md"
 requires-python = ">=3.13"
-dependencies = []
+dependencies = [
+    "mcp[cli]>=1.6.0",
+    "httpx>=0.28.0",
+    "tenacity>=9.0.0",
+    "pydantic>=2.10.0",
+]
+
+[project.scripts]
+toshl-mcp = "toshl_mcp.server:main"
 
 [tool.uv]
 dev-dependencies = [
     "pytest>=8.0.0",
+    "pytest-asyncio>=0.25.0",
+    "respx>=0.22.0",
     "ruff>=0.14.3",
     "pre-commit>=4.0.0",
+    "pyright>=1.1.0",
 ]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/toshl_mcp"]
+
+[tool.hatch.version]
+path = "src/toshl_mcp/__init__.py"
 
 [tool.ruff]
 target-version = "py313"
@@ -55,7 +69,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101", "ARG", "PLR2004"]
+"tests/**" = ["S101", "S105", "S106", "ARG", "PLR2004"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["toshl_mcp"]
@@ -63,3 +77,4 @@ known-first-party = ["toshl_mcp"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v"
+asyncio_mode = "auto"

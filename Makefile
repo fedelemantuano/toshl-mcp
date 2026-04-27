@@ -1,4 +1,4 @@
-.PHONY: help install lint lint-fix format test pre-commit clean
+.PHONY: help install lint lint-fix format test pre-commit clean dev
 
 help:
 	@echo "Commands:"
@@ -8,6 +8,7 @@ help:
 	@echo "  format       Run ruff formatter"
 	@echo "  test         Run tests"
 	@echo "  pre-commit   Run pre-commit on all files"
+	@echo "  dev          Run MCP inspector (loads .env)"
 	@echo "  clean        Remove build artifacts and caches"
 
 install:
@@ -24,6 +25,9 @@ format:
 
 test:
 	uv run pytest
+
+dev:
+	uv run --env-file .env mcp dev src/toshl_mcp/server.py
 
 pre-commit:
 	pre-commit run --all-files
