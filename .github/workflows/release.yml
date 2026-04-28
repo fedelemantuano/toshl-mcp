@@ -1,0 +1,213 @@
+name: Release
+
+on:
+  pull_request:
+    types: [closed]
+    branches: [main]
+
+permissions:
+  contents: write
+  packages: write
+  pull-requests: read
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  # Determine version bump type from PR labels
+  check-release:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    outputs:
+      release_type: ${{ steps.check-labels.outputs.release_type }}
+      should_release: ${{ steps.check-labels.outputs.should_release }}
+    steps:
+      - name: Check PR labels for release type
+        id: check-labels
+        env:
+          PR_LABELS: ${{ toJson(github.event.pull_request.labels.*.name) }}
+        run: |
+          echo "PR Labels: $PR_LABELS"
+
+          if echo "$PR_LABELS" | grep -q "major_release"; then
+            echo "release_type=major" >> $GITHUB_OUTPUT
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          elif echo "$PR_LABELS" | grep -q "minor_release"; then
+            echo "release_type=minor" >> $GITHUB_OUTPUT
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          elif echo "$PR_LABELS" | grep -q "patch_release"; then
+            echo "release_type=patch" >> $GITHUB_OUTPUT
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "release_type=none" >> $GITHUB_OUTPUT
+            echo "should_release=false" >> $GITHUB_OUTPUT
+            echo "No release label found. Skipping release."
+          fi
+
+  # Create release with version bump
+  release:
+    needs: check-release
+    if: needs.check-release.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      new_version: ${{ steps.bump-version.outputs.new_version }}
+      new_tag: ${{ steps.bump-version.outputs.new_tag }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Configure Git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Get current version and bump
+        id: bump-version
+        env:
+          RELEASE_TYPE: ${{ needs.check-release.outputs.release_type }}
+        run: |
+          # Extract current version from __init__.py
+          CURRENT_VERSION=$(grep -oP '__version__ = "\K[^"]+' src/toshl_mcp/__init__.py)
+          echo "Current version: $CURRENT_VERSION"
+
+          # Parse version components
+          IFS='.' read -ra VERSION_PARTS <<< "$CURRENT_VERSION"
+          MAJOR=${VERSION_PARTS[0]}
+          MINOR=${VERSION_PARTS[1]}
+          PATCH=${VERSION_PARTS[2]}
+
+          # Bump version based on release type
+          case $RELEASE_TYPE in
+            major)
+              MAJOR=$((MAJOR + 1))
+              MINOR=0
+              PATCH=0
+              ;;
+            minor)
+              MINOR=$((MINOR + 1))
+              PATCH=0
+              ;;
+            patch)
+              PATCH=$((PATCH + 1))
+              ;;
+          esac
+
+          NEW_VERSION="${MAJOR}.${MINOR}.${PATCH}"
+          echo "New version: $NEW_VERSION"
+          echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
+          echo "new_tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
+
+          # Update version in __init__.py
+          sed -i "s/__version__ = \"$CURRENT_VERSION\"/__version__ = \"$NEW_VERSION\"/" src/toshl_mcp/__init__.py
+
+          # Commit and tag
+          git add src/toshl_mcp/__init__.py
+          git commit -m "chore: bump version to $NEW_VERSION [skip ci]"
+          git tag -a "v$NEW_VERSION" -m "Release v$NEW_VERSION"
+          git push origin main --tags
+
+  # Build and publish Python package
+  publish-package:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: v${{ needs.release.outputs.new_version }}
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+
+      - name: Install uv
+        run: curl -LsSf https://astral.sh/uv/install.sh | sh
+
+      - name: Install dependencies
+        run: uv sync --all-extras
+
+      - name: Build package
+        run: uv build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-package-${{ needs.release.outputs.new_version }}
+          path: dist/
+          retention-days: 30
+
+      # Publish to GitHub Packages (private PyPI)
+      - name: Publish to PyPI
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
+        run: |
+          # Set PYPI_TOKEN in repo secrets to enable publishing
+          uv publish
+
+
+  # Create GitHub Release
+  create-github-release:
+    needs: [release, publish-package]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+        with:
+          ref: v${{ needs.release.outputs.new_version }}
+          fetch-depth: 0
+
+      - name: Download package artifacts
+        uses: actions/download-artifact@v8
+        with:
+          name: release-package-${{ needs.release.outputs.new_version }}
+          path: dist/
+
+      - name: Generate release notes
+        id: release-notes
+        run: |
+          # Get commits since last tag
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -n "$PREVIOUS_TAG" ]; then
+            COMMITS=$(git log --pretty=format:"- %s (%h)" $PREVIOUS_TAG..v${{ needs.release.outputs.new_version }} --no-merges)
+          else
+            COMMITS=$(git log --pretty=format:"- %s (%h)" --no-merges -20)
+          fi
+
+          # Create release notes
+          cat << EOF > release_notes.md
+          ## What's Changed
+
+          $COMMITS
+
+          ## Full Changelog
+
+          **Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREVIOUS_TAG:-initial}...v${{ needs.release.outputs.new_version }}
+          EOF
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ needs.release.outputs.new_version }}
+          name: Release v${{ needs.release.outputs.new_version }}
+          body_path: release_notes.md
+          files: |
+            dist/*
+          draft: false
+          prerelease: false
+          generate_release_notes: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
