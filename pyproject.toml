@@ -21,15 +21,18 @@ dependencies = [
 [project.scripts]
 toshl-mcp = "toshl_mcp.server:main"
 
-[tool.uv]
-dev-dependencies = [
+[dependency-groups]
+dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.25.0",
+    "pytest-cov>=6.0.0",
     "respx>=0.22.0",
     "ruff>=0.14.3",
     "pre-commit>=4.0.0",
     "pyright>=1.1.0",
 ]
+
+[tool.uv]
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/toshl_mcp"]
