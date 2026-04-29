@@ -22,12 +22,6 @@ Transport: stdio. Auth: Toshl Personal Token via HTTP Basic Auth.
 - [uv](https://docs.astral.sh/uv/)
 - Toshl Personal Token — generate at **Toshl → Profile → Apps & tokens**
 
-## Installation
-
-```bash
-make install
-```
-
 ## Claude Desktop Configuration
 
 **1. Install uv** (if not already installed):
@@ -36,10 +30,20 @@ make install
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-**2. Install the package:**
+**2. Install the package into a dedicated virtualenv:**
+
+With uv:
 
 ```bash
-git clone git@github.com:fedelemantuano/toshl-mcp.git ~/.toshl-mcp
+uv venv ~/.toshl-mcp
+uv pip install --python ~/.toshl-mcp/bin/python toshl-mcp
+```
+
+Or with pip:
+
+```bash
+python3 -m venv ~/.toshl-mcp
+~/.toshl-mcp/bin/pip install toshl-mcp
 ```
 
 **3. Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:**
@@ -48,13 +52,7 @@ git clone git@github.com:fedelemantuano/toshl-mcp.git ~/.toshl-mcp
 {
   "mcpServers": {
     "toshl": {
-      "command": "/Users/<your-username>/.local/bin/uv",
-      "args": [
-        "--directory",
-        "/Users/<your-username>/.toshl-mcp",
-        "run",
-        "toshl-mcp"
-      ],
+      "command": "/Users/<your-username>/.toshl-mcp/bin/toshl-mcp",
       "env": {
         "TOSHL_TOKEN": "<your-toshl-personal-token>"
       }
@@ -65,9 +63,6 @@ git clone git@github.com:fedelemantuano/toshl-mcp.git ~/.toshl-mcp
 
 Replace `<your-username>` with your macOS username (run `whoami` to confirm).
 
-> **Note:** Use the full `uv` path (not just `uv`) — Claude Desktop may resolve `uv` to
-> `uvx` which has different semantics and will fail to start the server.
-
 ## Environment Variables
 
 | Variable      | Required | Default   | Description                                         |
@@ -77,13 +72,41 @@ Replace `<your-username>` with your macOS username (run `whoami` to confirm).
 
 ## Development
 
+### Setup
+
+**1. Install uv** (if not already installed):
+
 ```bash
+curl -LsSf https://astral.sh/uv/install.sh | sh
+```
+
+**2. Install all dependencies:**
+
+```bash
+uv sync --all-groups
+```
+
+**3. Install pre-commit hooks:**
+
+```bash
+make pre-commit
+```
+
+### Make commands
+
+```bash
+make install     # install dependencies
 make lint        # check code
 make lint-fix    # check and auto-fix
 make format      # format code
 make test        # run tests
+make test-cov    # run tests with coverage report
 make pre-commit  # run all pre-commit hooks
+make dev         # start MCP inspector (requires .env)
+make clean       # remove build artifacts and caches
 ```
+
+> **Note:** Stage changes with `git add` before running `make pre-commit` — unstaged files are ignored.
 
 ### Testing with MCP Inspector
 

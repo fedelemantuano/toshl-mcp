@@ -148,13 +148,10 @@ jobs:
           path: dist/
           retention-days: 30
 
-      # Publish to GitHub Packages (private PyPI)
       - name: Publish to PyPI
         env:
           UV_PUBLISH_TOKEN: ${{ secrets.PYPI_TOKEN }}
-        run: |
-          # Set PYPI_TOKEN in repo secrets to enable publishing
-          uv publish
+        run: uv publish
 
 
   # Create GitHub Release

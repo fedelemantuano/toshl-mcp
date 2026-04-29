@@ -10,6 +10,7 @@ authors = [
     {name = "Fedele Mantuano", email = "mantuano.fedele@gmail.com"},
 ]
 readme = "README.md"
+license = {file = "LICENSE"}
 requires-python = ">=3.13"
 dependencies = [
     "mcp[cli]>=1.6.0",
