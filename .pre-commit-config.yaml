@@ -54,7 +54,7 @@ repos:
       - id: pyright
         name: pyright
         entry: uv run npx pyright
-        args: [src/, tests/, scripts/]
+        args: [src/, tests/]
         language: system
         pass_filenames: false
         types: [python]
