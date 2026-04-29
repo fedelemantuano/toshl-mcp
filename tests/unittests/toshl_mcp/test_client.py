@@ -228,6 +228,36 @@ class TestEndpoints:
             assert result[0].spent == 50.0
 
 
+class TestIsRetryable:
+    async def test_transport_error_retries_and_succeeds(self) -> None:
+        async with _fast_client() as client:
+            with respx.mock(base_url="https://api.toshl.com") as mock:
+                mock.get("/accounts").mock(
+                    side_effect=[
+                        httpx.ConnectError("connection refused"),
+                        httpx.Response(
+                            200,
+                            json=[_account_data()],
+                            headers={"X-Total-Count": "1"},
+                        ),
+                    ]
+                )
+                result = await client.get_accounts()
+                assert len(result) == 1
+                assert len(mock.calls) == 2
+
+
+class TestEndpointFilters:
+    async def test_get_entries_with_account_filter(self, client: ToshlClient) -> None:
+        with respx.mock(base_url="https://api.toshl.com") as mock:
+            route = mock.get("/entries").respond(
+                200, json=[_entry_data()], headers={"X-Total-Count": "1"}
+            )
+            await client.get_entries("2024-01-01", "2024-01-31", account="acc1")
+            params = dict(route.calls[0].request.url.params)
+            assert params["account"] == "acc1"
+
+
 class TestContextManager:
     async def test_not_initialized_raises(self) -> None:
         client = _fast_client()

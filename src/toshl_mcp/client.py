@@ -88,7 +88,7 @@ class ToshlClient:
                 response = await self._http.request(method, path, **kwargs)
                 response.raise_for_status()
                 return response
-        raise RuntimeError("Request failed after all retries")
+        raise RuntimeError("Request failed after all retries")  # pragma: no cover
 
     async def _get_all_pages(
         self, path: str, params: dict[str, Any] | None = None
