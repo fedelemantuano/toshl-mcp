@@ -3,7 +3,7 @@
 [![PyPI - Version](https://img.shields.io/pypi/v/toshl-mcp)](https://pypi.org/project/toshl-mcp/)
 [![PyPI - Downloads](https://img.shields.io/pypi/dm/toshl-mcp?color=blue)](https://pypistats.org/packages/toshl-mcp)
 
-**Author:** Fedele Mantuano <mantuano.fedele@gmail.com>
+**Author:** [Fedele Mantuano](https://github.com/fedelemantuano)
 
 MCP server that connects Claude Desktop to the [Toshl Finance API](https://developer.toshl.com/docs/).
 Transport: stdio. Auth: Toshl Personal Token via HTTP Basic Auth.
