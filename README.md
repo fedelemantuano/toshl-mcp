@@ -5,6 +5,8 @@
 MCP server that connects Claude Desktop to the [Toshl Finance API](https://developer.toshl.com/docs/).
 Transport: stdio. Auth: Toshl Personal Token via HTTP Basic Auth.
 
+https://github.com/user-attachments/assets/a098586e-9711-46ae-a12a-8eb5f568403b
+
 ## Tools
 
 | Tool             | Description                                              |
