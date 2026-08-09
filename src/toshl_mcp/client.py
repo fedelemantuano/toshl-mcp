@@ -1,5 +1,4 @@
 import logging
-import math
 from typing import Any
 
 import httpx
@@ -96,31 +95,39 @@ class ToshlClient:
         """Fetch all pages of a paginated endpoint sequentially.
 
         Sequential (not concurrent) to avoid burning the rate-limit budget.
-        Uses X-Total-Count header to determine total number of pages.
+        Follows the RFC 5988 ``Link`` header ``rel="next"`` until it is
+        absent. Toshl lists ``X-Total-Count`` in its exposed headers but
+        never actually sends it, so it cannot drive the loop.
         """
-        base_params: dict[str, Any] = {
+        request_params: dict[str, Any] | None = {
             **(params or {}),
             "per_page": _PER_PAGE,
             "page": 0,
         }
-        response = await self._request("GET", path, params=base_params)
-        data: list[dict[str, Any]] = response.json()
-        total = int(response.headers.get("X-Total-Count", len(data)))
-        logger.debug(
-            "GET %s: total=%d fetched first page (%d items)", path, total, len(data)
-        )
+        url = path
+        results: list[dict[str, Any]] = []
 
-        results = list(data)
-        total_pages = math.ceil(total / _PER_PAGE)
+        while True:
+            response = await self._request("GET", url, params=request_params)
+            data: list[dict[str, Any]] = response.json()
+            results.extend(data)
+            logger.debug("GET %s fetched %d items", url, len(data))
 
-        for page in range(1, total_pages):
-            page_params = {**base_params, "page": page}
-            page_response = await self._request("GET", path, params=page_params)
-            page_data: list[dict[str, Any]] = page_response.json()
-            results.extend(page_data)
-            logger.debug("GET %s page=%d fetched %d items", path, page, len(page_data))
+            next_link = response.links.get("next")
+            if next_link is None:
+                if len(data) == _PER_PAGE:
+                    logger.warning(
+                        "GET %s returned a full page (%d items) without a "
+                        "'next' link; results may be truncated",
+                        url,
+                        _PER_PAGE,
+                    )
+                return results
 
-        return results
+            # The server owns pagination state: follow its URL verbatim,
+            # query string included.
+            url = next_link["url"]
+            request_params = None
 
     async def get_accounts(self) -> list[Account]:
         """Return all accounts including archived ones."""
