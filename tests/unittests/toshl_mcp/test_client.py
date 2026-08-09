@@ -1,4 +1,5 @@
 import base64
+import logging
 from collections.abc import AsyncGenerator
 
 import httpx
@@ -71,11 +72,14 @@ class TestAuth:
     async def test_basic_auth_header(self, client: ToshlClient) -> None:
         expected = "Basic " + base64.b64encode(b"testtoken123:").decode()
         with respx.mock(base_url="https://api.toshl.com") as mock:
-            mock.get("/accounts").respond(
-                200, json=[_account_data()], headers={"X-Total-Count": "1"}
-            )
+            mock.get("/accounts").respond(200, json=[_account_data()])
             await client.get_accounts()
             assert mock.calls[0].request.headers["authorization"] == expected
+
+
+def _next_link(path: str, page: int) -> dict[str, str]:
+    """Link header advertising a following page, as Toshl sends it."""
+    return {"Link": f'<{path}?per_page=200&page={page}>; rel="next"'}
 
 
 class TestPagination:
@@ -84,7 +88,6 @@ class TestPagination:
             mock.get("/accounts").respond(
                 200,
                 json=[_account_data("1"), _account_data("2")],
-                headers={"X-Total-Count": "2"},
             )
             result = await client.get_accounts()
             assert len(result) == 2
@@ -97,26 +100,75 @@ class TestPagination:
         with respx.mock(base_url="https://api.toshl.com") as mock:
             mock.get("/accounts").mock(
                 side_effect=[
-                    httpx.Response(200, json=page0, headers={"X-Total-Count": "250"}),
-                    httpx.Response(200, json=page1, headers={"X-Total-Count": "250"}),
+                    httpx.Response(200, json=page0, headers=_next_link("/accounts", 1)),
+                    httpx.Response(200, json=page1),
                 ]
             )
             result = await client.get_accounts()
             assert len(result) == 250
             assert len(mock.calls) == 2
 
+    async def test_follows_next_link_verbatim(self, client: ToshlClient) -> None:
+        page0 = [_account_data(str(i)) for i in range(200)]
+
+        with respx.mock(base_url="https://api.toshl.com") as mock:
+            route = mock.get("/accounts").mock(
+                side_effect=[
+                    httpx.Response(200, json=page0, headers=_next_link("/accounts", 1)),
+                    httpx.Response(200, json=[]),
+                ]
+            )
+            await client.get_accounts()
+            params = dict(route.calls[1].request.url.params)
+            assert params["page"] == "1"
+            assert params["per_page"] == "200"
+
     async def test_empty_result(self, client: ToshlClient) -> None:
         with respx.mock(base_url="https://api.toshl.com") as mock:
-            mock.get("/accounts").respond(200, json=[], headers={"X-Total-Count": "0"})
+            mock.get("/accounts").respond(200, json=[])
             result = await client.get_accounts()
             assert result == []
             assert len(mock.calls) == 1
 
-    async def test_missing_total_count_header(self, client: ToshlClient) -> None:
+    async def test_real_shaped_tag_pagination(self, client: ToshlClient) -> None:
+        """247 tags: a full page of 200 plus a short page of 47."""
+        page0 = [_tag_data(str(i)) for i in range(200)]
+        page1 = [_tag_data(str(i)) for i in range(200, 247)]
+
+        with respx.mock(base_url="https://api.toshl.com") as mock:
+            mock.get("/tags").mock(
+                side_effect=[
+                    httpx.Response(200, json=page0, headers=_next_link("/tags", 1)),
+                    httpx.Response(200, json=page1),
+                ]
+            )
+            result = await client.get_tags()
+            assert len(result) == 247
+            assert result[-1].id == "246"
+
+    async def test_warns_on_full_page_without_next_link(
+        self, client: ToshlClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        page0 = [_account_data(str(i)) for i in range(200)]
+
+        with respx.mock(base_url="https://api.toshl.com") as mock:
+            mock.get("/accounts").respond(200, json=page0)
+            with caplog.at_level(logging.WARNING, logger="toshl_mcp.client"):
+                result = await client.get_accounts()
+
+        assert len(result) == 200
+        assert "may be truncated" in caplog.text
+
+    async def test_no_warning_on_short_page(
+        self, client: ToshlClient, caplog: pytest.LogCaptureFixture
+    ) -> None:
         with respx.mock(base_url="https://api.toshl.com") as mock:
             mock.get("/accounts").respond(200, json=[_account_data()])
-            result = await client.get_accounts()
-            assert len(result) == 1
+            with caplog.at_level(logging.WARNING, logger="toshl_mcp.client"):
+                result = await client.get_accounts()
+
+        assert len(result) == 1
+        assert caplog.text == ""
 
 
 class TestRetry:
@@ -126,9 +178,7 @@ class TestRetry:
                 mock.get("/accounts").mock(
                     side_effect=[
                         httpx.Response(429),
-                        httpx.Response(
-                            200, json=[_account_data()], headers={"X-Total-Count": "1"}
-                        ),
+                        httpx.Response(200, json=[_account_data()]),
                     ]
                 )
                 result = await client.get_accounts()
@@ -141,9 +191,7 @@ class TestRetry:
                 mock.get("/accounts").mock(
                     side_effect=[
                         httpx.Response(500),
-                        httpx.Response(
-                            200, json=[_account_data()], headers={"X-Total-Count": "1"}
-                        ),
+                        httpx.Response(200, json=[_account_data()]),
                     ]
                 )
                 result = await client.get_accounts()
@@ -171,18 +219,14 @@ class TestRetry:
 class TestEndpoints:
     async def test_get_accounts(self, client: ToshlClient) -> None:
         with respx.mock(base_url="https://api.toshl.com") as mock:
-            mock.get("/accounts").respond(
-                200, json=[_account_data()], headers={"X-Total-Count": "1"}
-            )
+            mock.get("/accounts").respond(200, json=[_account_data()])
             result = await client.get_accounts()
             assert len(result) == 1
             assert isinstance(result[0], Account)
 
     async def test_get_entries_passes_filters(self, client: ToshlClient) -> None:
         with respx.mock(base_url="https://api.toshl.com") as mock:
-            route = mock.get("/entries").respond(
-                200, json=[_entry_data()], headers={"X-Total-Count": "1"}
-            )
+            route = mock.get("/entries").respond(200, json=[_entry_data()])
             await client.get_entries(
                 "2024-01-01", "2024-01-31", category="42", tags="1,2"
             )
@@ -194,17 +238,13 @@ class TestEndpoints:
 
     async def test_get_entries_returns_entries(self, client: ToshlClient) -> None:
         with respx.mock(base_url="https://api.toshl.com") as mock:
-            mock.get("/entries").respond(
-                200, json=[_entry_data()], headers={"X-Total-Count": "1"}
-            )
+            mock.get("/entries").respond(200, json=[_entry_data()])
             result = await client.get_entries("2024-01-01", "2024-01-31")
             assert isinstance(result[0], Entry)
 
     async def test_get_categories_type_filter(self, client: ToshlClient) -> None:
         with respx.mock(base_url="https://api.toshl.com") as mock:
-            route = mock.get("/categories").respond(
-                200, json=[_category_data()], headers={"X-Total-Count": "1"}
-            )
+            route = mock.get("/categories").respond(200, json=[_category_data()])
             result = await client.get_categories(type="expense")
             assert isinstance(result[0], Category)
             params = dict(route.calls[0].request.url.params)
@@ -212,17 +252,13 @@ class TestEndpoints:
 
     async def test_get_tags(self, client: ToshlClient) -> None:
         with respx.mock(base_url="https://api.toshl.com") as mock:
-            mock.get("/tags").respond(
-                200, json=[_tag_data()], headers={"X-Total-Count": "1"}
-            )
+            mock.get("/tags").respond(200, json=[_tag_data()])
             result = await client.get_tags()
             assert isinstance(result[0], Tag)
 
     async def test_get_budgets(self, client: ToshlClient) -> None:
         with respx.mock(base_url="https://api.toshl.com") as mock:
-            mock.get("/budgets").respond(
-                200, json=[_budget_data()], headers={"X-Total-Count": "1"}
-            )
+            mock.get("/budgets").respond(200, json=[_budget_data()])
             result = await client.get_budgets()
             assert isinstance(result[0], Budget)
             assert result[0].spent == 50.0
@@ -238,7 +274,6 @@ class TestIsRetryable:
                         httpx.Response(
                             200,
                             json=[_account_data()],
-                            headers={"X-Total-Count": "1"},
                         ),
                     ]
                 )
@@ -250,9 +285,7 @@ class TestIsRetryable:
 class TestEndpointFilters:
     async def test_get_entries_with_account_filter(self, client: ToshlClient) -> None:
         with respx.mock(base_url="https://api.toshl.com") as mock:
-            route = mock.get("/entries").respond(
-                200, json=[_entry_data()], headers={"X-Total-Count": "1"}
-            )
+            route = mock.get("/entries").respond(200, json=[_entry_data()])
             await client.get_entries("2024-01-01", "2024-01-31", account="acc1")
             params = dict(route.calls[0].request.url.params)
             assert params["account"] == "acc1"

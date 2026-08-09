@@ -68,6 +68,41 @@ python3 -m venv ~/.toshl-mcp
 
 Replace `<your-username>` with your macOS username (run `whoami` to confirm).
 
+## Updating
+
+Upgrade in place — use the same tool you installed with.
+
+With uv:
+
+```bash
+uv pip install --python ~/.toshl-mcp/bin/python --upgrade toshl-mcp
+```
+
+Or with pip:
+
+```bash
+~/.toshl-mcp/bin/pip install --upgrade toshl-mcp
+```
+
+Then **restart Claude Desktop**. It spawns the server process at
+startup, so a running instance keeps the old version until it is
+restarted.
+
+Check the installed version:
+
+```bash
+~/.toshl-mcp/bin/python -c "import toshl_mcp; print(toshl_mcp.__version__)"
+```
+
+Compare it against the latest release on
+[PyPI](https://pypi.org/project/toshl-mcp/).
+
+`claude_desktop_config.json` does not need to change — the path to the
+executable stays the same across upgrades.
+
+> **Note:** `uv venv` does not install `pip` into the virtualenv, so
+> `~/.toshl-mcp/bin/pip` exists only if you used the pip install path.
+
 ## Environment Variables
 
 | Variable      | Required | Default   | Description                                         |
