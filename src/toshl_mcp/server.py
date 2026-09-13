@@ -97,15 +97,27 @@ async def get_budgets() -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-async def get_summary(from_date: str, to_date: str) -> dict[str, Any]:
+async def get_summary(
+    from_date: str,
+    to_date: str,
+    currency: str | None = None,
+) -> dict[str, Any]:
     """Get aggregated spending/income statistics for a date range.
 
     Args:
         from_date: Start date in YYYY-MM-DD format.
         to_date: End date in YYYY-MM-DD format.
+        currency: Output currency. Omit to use the user's Toshl main currency.
     """
-    logger.info("MCP tool: get_summary from=%s to=%s", from_date, to_date)
-    result = await tools.get_summary(_get_client(), from_date, to_date)
+    logger.info(
+        "MCP tool: get_summary from=%s to=%s currency=%s",
+        from_date,
+        to_date,
+        currency,
+    )
+    result = await tools.get_summary(
+        _get_client(), from_date, to_date, currency=currency
+    )
     return result.model_dump(mode="json")
 
 

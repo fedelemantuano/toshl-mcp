@@ -77,8 +77,22 @@ class Budget(BaseModel):
     to_date: date = Field(alias="to")
 
 
+class SummaryAmount(BaseModel):
+    """Aggregate amount and entry count returned by Toshl."""
+
+    sum: float
+    count: int
+
+
+class ToshlSummary(BaseModel):
+    """Expense and income aggregates returned by ``GET /me/summary``."""
+
+    expenses: SummaryAmount
+    incomes: SummaryAmount
+
+
 class Summary(BaseModel):
-    """Aggregated spending statistics computed locally from a set of entries."""
+    """Date-range statistics derived from Toshl's summary aggregates."""
 
     from_date: str
     to_date: str

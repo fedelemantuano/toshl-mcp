@@ -150,14 +150,21 @@ class TestServerTools:
             total_income=100.0,
             net=50.0,
             entry_count=2,
-            period_days=30,
-            avg_daily_expense=1.67,
+            period_days=31,
+            avg_daily_expense=1.61,
         )
-        with patch(
-            "toshl_mcp.server.tools.get_summary", new=AsyncMock(return_value=summary)
-        ):
-            result = await server_module.get_summary("2024-01-01", "2024-01-31")
+        mock_get_summary = AsyncMock(return_value=summary)
+        with patch("toshl_mcp.server.tools.get_summary", new=mock_get_summary):
+            result = await server_module.get_summary(
+                "2024-01-01", "2024-01-31", currency="USD"
+            )
         assert result == summary.model_dump(mode="json")
+        mock_get_summary.assert_awaited_once_with(
+            server_module._client,
+            "2024-01-01",
+            "2024-01-31",
+            currency="USD",
+        )
 
 
 class TestMain:

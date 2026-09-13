@@ -19,11 +19,55 @@ Transport: stdio. Auth: Toshl Personal Token via HTTP Basic Auth.
 | `get_categories` | List expense/income categories                           |
 | `get_tags`       | List tags                                                |
 | `get_budgets`    | List budgets with current spending status                |
-| `get_summary`    | Aggregated stats (totals, averages) for a date range     |
+| `get_summary`    | Toshl summary totals and averages for a date range       |
+
+### `get_accounts`
+
+Returns all Toshl accounts, including archived accounts. Each result includes
+the account name, current and initial balances, currency, type, and status.
+
+### `get_entries`
+
+Returns transactions between the required inclusive `from_date` and `to_date`
+arguments, both in `YYYY-MM-DD` format. The optional `category` argument filters
+by category ID, while `tags` accepts comma-separated tag IDs.
+
+Each entry includes its amount, currency, date, description, account, category,
+and tags.
+
+### `get_categories`
+
+Returns expense and income categories. Use the optional `type` argument with
+`expense` or `income` to return only that category type; omit it to return both.
+
+Each category includes its ID, name, type, and deletion status.
+
+### `get_tags`
+
+Returns all user-defined Toshl tags. Each tag includes its ID, name, and whether
+it applies to expenses or income.
+
+### `get_budgets`
+
+Returns all budgets with their limits and current spending status. Each budget
+includes its ID, name, limit, amount spent, currency, and inclusive start and
+end dates.
+
+### `get_summary`
+
+Returns expense and income aggregates from Toshl's summary endpoint. The
+`from_date` and `to_date` arguments use `YYYY-MM-DD` and are both inclusive.
+Use the optional `currency` argument to request a specific output currency;
+when omitted, Toshl uses the user's main currency.
+
+The result contains `from_date`, `to_date`, `total_expenses`, `total_income`,
+`net`, `avg_daily_expense`, `period_days`, and `entry_count`. `entry_count`
+combines Toshl's expense and income counts, and the daily average uses the
+inclusive number of days in the range.
 
 ## Requirements
 
-- Python 3.13 or 3.14
+- Python 3.11 or newer
 - [uv](https://docs.astral.sh/uv/)
 - Toshl Personal Token — generate at **Toshl → Profile → Apps & tokens**
 

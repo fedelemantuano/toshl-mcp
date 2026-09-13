@@ -1,4 +1,5 @@
 import logging
+from datetime import date
 from typing import Any
 
 import httpx
@@ -11,7 +12,7 @@ from tenacity import (
 from tenacity.wait import wait_base
 
 from toshl_mcp.config import Settings
-from toshl_mcp.models import Account, Budget, Category, Entry, Tag
+from toshl_mcp.models import Account, Budget, Category, Entry, Tag, ToshlSummary
 
 logger = logging.getLogger(__name__)
 
@@ -167,6 +168,33 @@ class ToshlClient:
         entries = [Entry.model_validate(item) for item in data]
         logger.info("Fetched %d entries", len(entries))
         return entries
+
+    async def get_summary(
+        self,
+        from_date: str,
+        to_date: str,
+        *,
+        currency: str | None = None,
+    ) -> ToshlSummary:
+        """Return Toshl's expense and income summary for a date range.
+
+        Args:
+            from_date: Start date in YYYY-MM-DD format (inclusive).
+            to_date: End date in YYYY-MM-DD format (inclusive).
+            currency: Output currency; omit to use the user's main currency.
+
+        Raises:
+            ValueError: If either date is invalid or the range is reversed.
+        """
+        from_dt = date.fromisoformat(from_date)
+        to_dt = date.fromisoformat(to_date)
+        if from_dt > to_dt:
+            raise ValueError("from_date must be on or before to_date")
+        params: dict[str, Any] = {"from": from_date, "to": to_date}
+        if currency is not None:
+            params["currency"] = currency
+        response = await self._request("GET", "/me/summary", params=params)
+        return ToshlSummary.model_validate(response.json())
 
     async def get_categories(self, *, type: str | None = None) -> list[Category]:
         """Return all categories, optionally filtered to 'expense' or 'income'."""
