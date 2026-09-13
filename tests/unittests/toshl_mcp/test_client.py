@@ -9,7 +9,7 @@ from tenacity import stop_after_attempt, wait_none
 
 from toshl_mcp.client import ToshlClient
 from toshl_mcp.config import Settings
-from toshl_mcp.models import Account, Budget, Category, Entry, Tag
+from toshl_mcp.models import Account, Budget, Category, Entry, Tag, ToshlSummary
 
 
 def _settings() -> Settings:
@@ -59,6 +59,13 @@ def _budget_data(id: str = "1") -> dict:
         "currency": {"code": "EUR", "fixed": False},
         "from": "2024-01-01",
         "to": "2024-01-31",
+    }
+
+
+def _summary_data() -> dict:
+    return {
+        "expenses": {"sum": 80.0, "count": 2},
+        "incomes": {"sum": 200.0, "count": 1},
     }
 
 
@@ -241,6 +248,50 @@ class TestEndpoints:
             mock.get("/entries").respond(200, json=[_entry_data()])
             result = await client.get_entries("2024-01-01", "2024-01-31")
             assert isinstance(result[0], Entry)
+
+    async def test_get_summary_requests_summary_endpoint(
+        self, client: ToshlClient
+    ) -> None:
+        with respx.mock(base_url="https://api.toshl.com") as mock:
+            route = mock.get("/me/summary").respond(200, json=_summary_data())
+            result = await client.get_summary("2026-01-01", "2026-01-31")
+
+            assert isinstance(result, ToshlSummary)
+            assert dict(route.calls[0].request.url.params) == {
+                "from": "2026-01-01",
+                "to": "2026-01-31",
+            }
+
+    async def test_get_summary_includes_currency_when_supplied(
+        self, client: ToshlClient
+    ) -> None:
+        with respx.mock(base_url="https://api.toshl.com") as mock:
+            route = mock.get("/me/summary").respond(200, json=_summary_data())
+            await client.get_summary("2026-01-01", "2026-01-31", currency="USD")
+
+            assert dict(route.calls[0].request.url.params) == {
+                "from": "2026-01-01",
+                "to": "2026-01-31",
+                "currency": "USD",
+            }
+
+    async def test_get_summary_rejects_invalid_date_without_request(
+        self, client: ToshlClient
+    ) -> None:
+        with respx.mock(base_url="https://api.toshl.com") as mock:
+            with pytest.raises(ValueError):
+                await client.get_summary("not-a-date", "2026-01-31")
+
+            assert len(mock.calls) == 0
+
+    async def test_get_summary_rejects_reversed_range_without_request(
+        self, client: ToshlClient
+    ) -> None:
+        with respx.mock(base_url="https://api.toshl.com") as mock:
+            with pytest.raises(ValueError, match="from_date must be on or before"):
+                await client.get_summary("2026-02-01", "2026-01-31")
+
+            assert len(mock.calls) == 0
 
     async def test_get_categories_type_filter(self, client: ToshlClient) -> None:
         with respx.mock(base_url="https://api.toshl.com") as mock:

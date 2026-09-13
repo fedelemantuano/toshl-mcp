@@ -74,26 +74,26 @@ async def get_summary(
     client: ToshlClient,
     from_date: str,
     to_date: str,
+    *,
+    currency: str | None = None,
 ) -> Summary:
-    """Compute aggregated expense/income statistics for the given date range.
-
-    Fetches all entries in the range and aggregates them locally —
-    Toshl has no dedicated summary endpoint.
+    """Return Toshl's aggregated statistics for the given date range.
 
     Args:
         client: Authenticated Toshl API client.
         from_date: Start date in YYYY-MM-DD format.
         to_date: End date in YYYY-MM-DD format.
+        currency: Output currency; omit to use the user's Toshl main currency.
     """
     logger.info("Tool: get_summary from=%s to=%s", from_date, to_date)
-    entries = await client.get_entries(from_date, to_date)
-
-    total_expenses = sum(abs(e.amount) for e in entries if e.amount < 0)
-    total_income = sum(e.amount for e in entries if e.amount > 0)
-
     from_dt = date.fromisoformat(from_date)
     to_dt = date.fromisoformat(to_date)
-    period_days = max((to_dt - from_dt).days, 1)
+    if from_dt > to_dt:
+        raise ValueError("from_date must be on or before to_date")
+    period_days = (to_dt - from_dt).days + 1
+    api_summary = await client.get_summary(from_date, to_date, currency=currency)
+    total_expenses = api_summary.expenses.sum
+    total_income = api_summary.incomes.sum
 
     summary = Summary(
         from_date=from_date,
@@ -103,7 +103,7 @@ async def get_summary(
         net=round(total_income - total_expenses, 2),
         avg_daily_expense=round(total_expenses / period_days, 2),
         period_days=period_days,
-        entry_count=len(entries),
+        entry_count=api_summary.expenses.count + api_summary.incomes.count,
     )
     logger.info(
         "Tool: get_summary expenses=%.2f income=%.2f net=%.2f entries=%d",

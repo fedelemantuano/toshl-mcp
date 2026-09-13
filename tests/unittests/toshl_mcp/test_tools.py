@@ -1,7 +1,19 @@
 from datetime import date
 from unittest.mock import AsyncMock, MagicMock
 
-from toshl_mcp.models import Account, Budget, Category, Currency, Entry, Summary, Tag
+import pytest
+
+from toshl_mcp.models import (
+    Account,
+    Budget,
+    Category,
+    Currency,
+    Entry,
+    Summary,
+    SummaryAmount,
+    Tag,
+    ToshlSummary,
+)
 from toshl_mcp.tools import (
     get_accounts,
     get_budgets,
@@ -23,6 +35,19 @@ def _make_entry(amount: float, id: str = "1") -> Entry:
         currency=_currency(),
         date=date(2024, 1, 15),
         account="acc1",
+    )
+
+
+def _api_summary(
+    *,
+    expenses: float = 0.0,
+    expense_count: int = 0,
+    incomes: float = 0.0,
+    income_count: int = 0,
+) -> ToshlSummary:
+    return ToshlSummary(
+        expenses=SummaryAmount(sum=expenses, count=expense_count),
+        incomes=SummaryAmount(sum=incomes, count=income_count),
     )
 
 
@@ -49,6 +74,15 @@ def _make_client(**method_results) -> MagicMock:
     )
     client.get_tags = AsyncMock(return_value=method_results.get("get_tags", []))
     client.get_budgets = AsyncMock(return_value=method_results.get("get_budgets", []))
+    client.get_summary = AsyncMock(
+        return_value=method_results.get(
+            "get_summary",
+            ToshlSummary(
+                expenses=SummaryAmount(sum=0.0, count=0),
+                incomes=SummaryAmount(sum=0.0, count=0),
+            ),
+        )
+    )
     return client
 
 
@@ -118,51 +152,82 @@ class TestGetBudgets:
 
 
 class TestGetSummary:
-    async def test_mixed_entries(self) -> None:
-        entries = [
-            _make_entry(-50.0, "1"),  # expense
-            _make_entry(-30.0, "2"),  # expense
-            _make_entry(200.0, "3"),  # income
-        ]
-        client = _make_client(get_entries=entries)
+    async def test_maps_toshl_aggregates_to_summary(self) -> None:
+        client = _make_client(
+            get_summary=_api_summary(
+                expenses=80.0,
+                expense_count=2,
+                incomes=200.0,
+                income_count=1,
+            )
+        )
         result = await get_summary(client, "2024-01-01", "2024-01-31")
+
         assert isinstance(result, Summary)
+        assert result.from_date == "2024-01-01"
+        assert result.to_date == "2024-01-31"
         assert result.total_expenses == 80.0
         assert result.total_income == 200.0
         assert result.net == 120.0
         assert result.entry_count == 3
-        assert result.period_days == 30
+        assert result.period_days == 31
+        assert result.avg_daily_expense == 2.58
+        client.get_summary.assert_awaited_once_with(
+            "2024-01-01", "2024-01-31", currency=None
+        )
+        client.get_entries.assert_not_awaited()
 
-    async def test_expenses_only(self) -> None:
-        entries = [_make_entry(-100.0)]
-        client = _make_client(get_entries=entries)
-        result = await get_summary(client, "2024-01-01", "2024-01-31")
-        assert result.total_income == 0.0
-        assert result.net == -100.0
-
-    async def test_income_only(self) -> None:
-        entries = [_make_entry(500.0)]
-        client = _make_client(get_entries=entries)
-        result = await get_summary(client, "2024-01-01", "2024-01-31")
-        assert result.total_expenses == 0.0
-        assert result.net == 500.0
-
-    async def test_empty_entries(self) -> None:
-        client = _make_client(get_entries=[])
-        result = await get_summary(client, "2024-01-01", "2024-01-31")
-        assert result.total_expenses == 0.0
-        assert result.total_income == 0.0
-        assert result.entry_count == 0
-
-    async def test_zero_day_range_clamps_to_one(self) -> None:
-        entries = [_make_entry(-10.0)]
-        client = _make_client(get_entries=entries)
+    async def test_same_day_range_has_one_day(self) -> None:
+        client = _make_client(get_summary=_api_summary(expenses=10.0))
         result = await get_summary(client, "2024-01-01", "2024-01-01")
+
         assert result.period_days == 1
         assert result.avg_daily_expense == 10.0
 
-    async def test_avg_daily_expense(self) -> None:
-        entries = [_make_entry(-30.0)]
-        client = _make_client(get_entries=entries)
+    async def test_multi_day_range_is_inclusive(self) -> None:
+        client = _make_client(get_summary=_api_summary(expenses=62.0))
+        result = await get_summary(client, "2026-01-01", "2026-01-31")
+
+        assert result.period_days == 31
+        assert result.avg_daily_expense == 2.0
+
+    async def test_zero_expenses_has_zero_daily_average(self) -> None:
+        client = _make_client(get_summary=_api_summary(incomes=500.0, income_count=1))
         result = await get_summary(client, "2024-01-01", "2024-01-31")
-        assert result.avg_daily_expense == 1.0  # 30 / 30 days
+
+        assert result.total_expenses == 0.0
+        assert result.avg_daily_expense == 0.0
+        assert result.net == 500.0
+
+    async def test_passes_currency(self) -> None:
+        client = _make_client(get_summary=_api_summary())
+        await get_summary(client, "2024-01-01", "2024-01-31", currency="USD")
+
+        client.get_summary.assert_awaited_once_with(
+            "2024-01-01", "2024-01-31", currency="USD"
+        )
+
+    @pytest.mark.parametrize(
+        ("from_date", "to_date"),
+        [
+            ("not-a-date", "2024-01-31"),
+            ("2024-01-01", "not-a-date"),
+        ],
+    )
+    async def test_invalid_dates_do_not_call_client(
+        self, from_date: str, to_date: str
+    ) -> None:
+        client = _make_client(get_summary=_api_summary())
+
+        with pytest.raises(ValueError):
+            await get_summary(client, from_date, to_date)
+
+        client.get_summary.assert_not_awaited()
+
+    async def test_reversed_range_does_not_call_client(self) -> None:
+        client = _make_client(get_summary=_api_summary())
+
+        with pytest.raises(ValueError, match="from_date must be on or before"):
+            await get_summary(client, "2024-02-01", "2024-01-31")
+
+        client.get_summary.assert_not_awaited()
