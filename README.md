@@ -67,7 +67,7 @@ inclusive number of days in the range.
 
 ## Requirements
 
-- Python 3.13 or 3.14
+- Python 3.11 or newer
 - [uv](https://docs.astral.sh/uv/)
 - Toshl Personal Token — generate at **Toshl → Profile → Apps & tokens**
 
