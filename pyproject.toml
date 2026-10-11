@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "toshl-mcp"
 dynamic = ["version"]
-description = "MCP server exposing Toshl Finance API to Claude Desktop"
+description = "MCP server exposing the Toshl Finance API to MCP clients"
 authors = [
     {name = "Fedele Mantuano", email = "mantuano.fedele@gmail.com"},
 ]
