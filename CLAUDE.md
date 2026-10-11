@@ -1,4 +1,4 @@
-# CLAUDE.md
+# Repository Instructions
 
 ## Engineering Principles
 
@@ -25,8 +25,7 @@
 
 ## Workflow
 
-- Stage with `git add` before `make pre-commit` — unstaged files ignored.
-- Run `make pre-commit` after every code change.
+- Run `make pre-commit` after changes; it checks all tracked files.
 
 ## Libraries
 

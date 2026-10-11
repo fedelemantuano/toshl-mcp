@@ -5,7 +5,8 @@
 
 **Author:** [Fedele Mantuano](https://github.com/fedelemantuano)
 
-MCP server that connects Claude Desktop to the [Toshl Finance API](https://developer.toshl.com/docs/).
+MCP server that connects Codex, ChatGPT Desktop, Claude Desktop, and other
+local MCP clients to the [Toshl Finance API](https://developer.toshl.com/docs/).
 Transport: stdio. Auth: Toshl Personal Token via HTTP Basic Auth.
 
 <video src="https://github.com/user-attachments/assets/a098586e-9711-46ae-a12a-8eb5f568403b" controls autoplay loop muted width="100%"></video>
@@ -71,7 +72,10 @@ inclusive number of days in the range.
 - [uv](https://docs.astral.sh/uv/)
 - Toshl Personal Token — generate at **Toshl → Profile → Apps & tokens**
 
-## Claude Desktop Configuration
+## Installation
+
+The examples below use macOS paths. Install the package once, then configure
+each client that should use it.
 
 **1. Install uv** (if not already installed):
 
@@ -95,7 +99,71 @@ python3 -m venv ~/.toshl-mcp
 ~/.toshl-mcp/bin/pip install toshl-mcp
 ```
 
-**3. Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:**
+### Codex CLI and IDE
+
+Add the following to `~/.codex/config.toml`, keeping your existing settings:
+
+```toml
+[mcp_servers.toshl]
+command = "/Users/<your-username>/.toshl-mcp/bin/toshl-mcp"
+
+[mcp_servers.toshl.env]
+TOSHL_TOKEN = "<your-toshl-personal-token>"
+```
+
+Replace `<your-username>` with your macOS username (run `whoami` to confirm)
+and the token placeholder with your Toshl Personal Token. Keep this
+configuration in your user directory; it contains your token.
+
+Alternatively, register the same server with the CLI:
+
+```bash
+codex mcp add toshl \
+  --env TOSHL_TOKEN="<your-toshl-personal-token>" \
+  -- "$HOME/.toshl-mcp/bin/toshl-mcp"
+```
+
+Choose either the TOML configuration or the CLI command. Both configure the
+same server. Codex CLI and the IDE extension share this configuration.
+Start a new CLI session or restart the IDE extension after configuring it.
+
+Verify registration:
+
+```bash
+codex mcp list
+```
+
+Then use `/mcp` in Codex CLI to check that `toshl` is connected. Registration
+alone does not verify that the server starts or that the token is valid.
+
+See the [official Codex MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=cli).
+
+### ChatGPT Desktop
+
+For local Codex sessions in ChatGPT Desktop, use the same
+`~/.codex/config.toml` configuration shown above. Desktop, Codex CLI, and the
+IDE extension share MCP configuration on the same Codex host, so configuring
+`toshl` once is sufficient.
+
+To add the server through the Desktop interface instead:
+
+1. Open **Settings → MCP servers → Add server**.
+1. Enter `toshl` as the name and select **STDIO**.
+1. Set the command to `/Users/<your-username>/.toshl-mcp/bin/toshl-mcp`.
+1. Save the server.
+1. Ensure the `[mcp_servers.toshl.env]` table in `~/.codex/config.toml`
+   contains `TOSHL_TOKEN`, as shown above.
+1. Save the TOML file and select **Restart** in the MCP settings.
+
+Use `/mcp` in the composer to check that the server is connected. This setup
+provides the local MCP server in the Codex host; ChatGPT web and hosted
+Chat/Work conversations use their own plugin connections.
+
+See the [official Desktop MCP documentation](https://learn.chatgpt.com/docs/extend/mcp?surface=app).
+
+### Claude Desktop
+
+Add to `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
@@ -111,6 +179,18 @@ python3 -m venv ~/.toshl-mcp
 ```
 
 Replace `<your-username>` with your macOS username (run `whoami` to confirm).
+Replace the token placeholder with your Toshl Personal Token, then restart
+Claude Desktop.
+
+### Verify the connection
+
+After restarting your client, ask it to use Toshl's `get_categories` tool.
+A successful tool response verifies both the MCP connection and Toshl
+authentication. The server exposes all six tools listed above.
+
+If the server fails to start, check the absolute executable path and that
+`TOSHL_TOKEN` is set in the client configuration. The server reads environment
+variables; installing the package does not configure a token automatically.
 
 ## Updating
 
@@ -128,9 +208,10 @@ Or with pip:
 ~/.toshl-mcp/bin/pip install --upgrade toshl-mcp
 ```
 
-Then **restart Claude Desktop**. It spawns the server process at
-startup, so a running instance keeps the old version until it is
-restarted.
+Then **restart the MCP server in each client that uses it**: start a new
+Codex CLI session, restart the IDE extension, select **Restart** in ChatGPT
+Desktop's MCP settings, or restart Claude Desktop. A running server process
+keeps the old version until it is restarted.
 
 Check the installed version:
 
@@ -141,8 +222,8 @@ Check the installed version:
 Compare it against the latest release on
 [PyPI](https://pypi.org/project/toshl-mcp/).
 
-`claude_desktop_config.json` does not need to change — the path to the
-executable stays the same across upgrades.
+Client configuration does not need to change — the path to the executable
+stays the same across upgrades.
 
 > **Note:** `uv venv` does not install `pip` into the virtualenv, so
 > `~/.toshl-mcp/bin/pip` exists only if you used the pip install path.
@@ -155,6 +236,12 @@ executable stays the same across upgrades.
 | `LOG_LEVEL`   | No       | `WARNING` | Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`) |
 
 ## Development
+
+### Agent instructions
+
+`CLAUDE.md` is the source of the repository instructions.
+`AGENTS.md` is a relative symbolic link to `CLAUDE.md`, so Claude Code and
+Codex read the same instructions. Edit `CLAUDE.md` to update both.
 
 ### Setup
 
@@ -190,11 +277,11 @@ make dev         # start MCP inspector (requires .env)
 make clean       # remove build artifacts and caches
 ```
 
-> **Note:** Stage changes with `git add` before running `make pre-commit` — unstaged files are ignored.
+> **Note:** `make pre-commit` checks all tracked files, including unstaged changes.
 
 ### Testing with MCP Inspector
 
-The MCP Inspector lets you call tools interactively in a browser without Claude Desktop.
+The MCP Inspector lets you call tools interactively in a browser.
 
 **1. Create a `.env` file** in the project root:
 
